@@ -1,4 +1,6 @@
 import os
+import sys
+
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -46,98 +48,162 @@ def sort_compounds(data):
     })
 
     # Sort by presence counts (descending) and then mean fold change (descending)
-    sorting_key = sorting_key.sort_values(by=["presence_counts", "mean_fold_change"], ascending=[False, False])
+    sorting_key = sorting_key.sort_values(by=["presence_counts", "mean_fold_change"], ascending=[False, False], key=abs)
 
     # Reorder the data based on the sorted key
     sorted_data = data.loc[sorting_key.index]
 
     return sorted_data
 
+def compare_compounds(df1, df2):
+    common_compounds_dict = {}
+    all_compounds = []
+    # Iterate through the columns in filtered_data
+    for col in df1.columns:
+        common_col = []
+        # Extract the corresponding column name in filtered_data_to_compare
+        if "serum" in col:
+            compare_col = col.replace('_serum_', '_caecum_')
+        elif "caecum" in col:
+            compare_col = col.replace('_caecum_', '_serum_')
+        else:
+            print("problematic data type exit")
+            sys.exit()
+        # Check if the column exists in filtered_data_to_compare
+        if compare_col in df2.columns:
+            # Iterate through the rows (compounds) and check for non-NaN values in both columns
+            for compound in df1.index:
+                if compound in df2[compare_col]:
+                    if not pd.isna(df1.loc[compound, col]) and not pd.isna(
+                            df2.loc[compound, compare_col]):
+                        common_col.append(compound)
+                        if compound not in all_compounds:
+                            all_compounds.append(compound)
+                        # common_col = sorted(list(set(common_col)))
+        common_compounds_dict[col] = common_col
 
-def create_heatmaps(folder_path, output_folder_path):
+
+
+    return common_compounds_dict, all_compounds
+
+def create_heatmaps(folder_path, output_folder_path, analysis_type, filtered, data_input_type):
+    if filtered:
+        output_folder_path = output_folder_path.replace("TO_REPLACE", "filtered") + "_filtered"
+        filtered_title = "_filtered"
+    else:
+        filtered_title = ""
+        output_folder_path = output_folder_path.replace("TO_REPLACE", "normal")
+  #### FOLD CHANGE DIRECTION IS A/B E.G. CTR_IBD3_CAECUM CITRULLINE = 0.03 A HAS LOWER LEVELS THAN B ####
+  #### FOLD CHANGE DIRECTION IS A/B E.G. CTR_IBD3_CAECUM D-GLUCOSAMINE 6-PHOSPHATE = 21.2 A HAS HIGHER LEVELS THAN B ####
+    if not os.path.exists(output_folder_path):
+        os.makedirs(output_folder_path)
     data_types = ["caecum", "serum"]
     exp_types = ["gno", "muc2_plus", "muc2_minus", "patient1FMT", "patient2FMT", "rescue_pre", "rescue_postplus", "patient_abx"]
     fold_change_data = load_experiments(folder_path)
     fold_change_data = fold_change_data.fillna(np.nan)
+    # fold_change_data = fold_change_data.fillna(0)
+    # fold_change_data = fold_change_data.loc[~(fold_change_data == 0).all(axis=1)]
+    all_dataframes = {}
     for data_type in data_types:
         for exp in exp_types:
             exp_name = exp + "_" + data_type
-            heatmap_path = os.path.join(output_folder_path, exp_name)
-            filtered_data = filter_data(fold_change_data, exp, data_type)
-            filtered_data = filtered_data.dropna(how="all")
-            filtered_data = sort_compounds(filtered_data)
-            filtered_data = filtered_data.reindex(sorted(filtered_data.columns), axis=1)
-            # print(f"Filtered data for experiment type: {exp}")
-            # print(filtered_data)
-        # for exp_type in exp_types:
-        #     fold_change_data = load_experiments(folder_path, exp_type)
-        #     fold_change_data = fold_change_data.fillna(np.nan)  # Keep NaN for missing values
-
-        # Step 3: Plot the heatmap
-        #     plt.figure(figsize=(40, 40 ))  # Adjust size to ensure square cells
-            if filtered_data.empty:
-                fig, ax = plt.subplots(figsize=(20, 15))
-                ax.set_xticks([])  # Remove ticks
-                ax.set_yticks([])
-                ax.set_title(exp_name.upper(), pad=20)
-                ax.set_xlabel("Experiments", labelpad=20)
-                ax.set_ylabel("Compounds")
-                plt.tight_layout()
-                plt.savefig(heatmap_path)
-                # plt.show()
-                continue
-            fig, ax = plt.subplots(figsize=(7, 35))  # Adjust figure size for better layout
-            nan_mask = filtered_data.isna()
-            sns.heatmap(
-                filtered_data,
-                cmap="coolwarm",
-                linewidths=0.5,
-                linecolor="black",
-                square=True,  # Ensures equal aspect ratio
-                cbar_kws={"label": "Fold Change"},
-                mask=nan_mask,  # Mask NaN values to keep them white
-                ax=ax,
-            )
-            for i in range(filtered_data.shape[0]):  # Iterate over rows
-                for j in range(filtered_data.shape[1]):  # Iterate over columns
-                    if nan_mask.iloc[i, j]:  # If the value is NaN
-                        ax.text(
-                            j + 0.5, i + 0.5, "X",  # Position the text in the center of the box
-                            ha="center", va="center", color="black", fontsize=10, fontweight="bold"
-                        )
-            ax.xaxis.set_label_position("top")
-            ax.xaxis.tick_top()
-            ax.set_xlabel("Experiments", labelpad=20)  # Add padding for clarity
-            # Remove any unnecessary extra bars
-            # plt.tight_layout()  # Ensure proper layout without extra gaps
-
-            # Add hatch lines for missing values
-            # missing_mask = fold_change_data.isna()
-            # sns.heatmap(
-            #     missing_mask,
-            #     cmap=sns.color_palette(["lightgrey"], as_cmap=True),
-            #     annot=False,
-            #     linewidths=0.5,
-            #     linecolor='black',
-            #     alpha=0.2,  # Adjust transparency
-            # )
-
-            ax.spines['top'].set_visible(True)
-            ax.spines['right'].set_visible(True)
-            ax.spines['bottom'].set_visible(True)
-            ax.spines['left'].set_visible(True)
-            # Label the axes
-            plt.title(exp_name.upper(), pad=20)
-            plt.xlabel("Experiments")
-            plt.ylabel("Compounds")
-            plt.xticks(rotation=90)
+            if analysis_type == "joined":
+                exp_name = exp
+                data_type_to_compare = data_types[data_types.index(data_type)-1]
+                filtered_data_to_compare = filter_data(fold_change_data, exp, data_type_to_compare)
+                # filtered_data_to_compare = filtered_data_to_compare.dropna(how="all")
+                filtered_data_to_compare = sort_compounds(filtered_data_to_compare)
+                filtered_data_to_compare = filtered_data_to_compare.reindex(sorted(filtered_data_to_compare.columns), axis=1)
+                filtered_data = filter_data(fold_change_data, exp, data_type)
+                # filtered_data = filtered_data.dropna(how="all")
+                filtered_data = sort_compounds(filtered_data)
+                common_compounds_dict, all_compounds = compare_compounds(filtered_data, filtered_data_to_compare)
+                filtered_data = filtered_data.loc[filtered_data.index.isin(all_compounds)]
+                filtered_data = filtered_data.reindex(sorted(filtered_data.columns), axis=1)
+                joined_data = filtered_data.join(filtered_data_to_compare, how='left')
+                joined_data = joined_data.sort_index(axis=1)
+                joined_data = sort_compounds(joined_data)
+                joined_data = joined_data.loc[~(joined_data == 0).all(axis=1)]
+                joined_data = joined_data.dropna(how="all")
+                filtered_data = joined_data
+            else:
+                heatmap_path = os.path.join(output_folder_path, exp_name)
+                filtered_data = filter_data(fold_change_data, exp, data_type)
+                filtered_data = sort_compounds(filtered_data)
+                filtered_data = filtered_data.reindex(sorted(filtered_data.columns), axis=1)
+                filtered_data = filtered_data.loc[~(filtered_data == 0).all(axis=1)]
+                filtered_data = filtered_data.dropna(how="all")
+                if exp_name == "gno_caecum":
+                    print("asd")
+            if filtered:
+                filtered_data = filtered_data.head(40)
+            all_dataframes[exp_name] = filtered_data
+    # global_min = -10.1
+    # global_max = 7
+    global_min = min(all_dataframes[df].min().min() for df in all_dataframes)
+    global_max = max(all_dataframes[df].max().max() for df in all_dataframes)
+    for exp_name in all_dataframes:
+        filtered_data = all_dataframes[exp_name]
+        heatmap_path = os.path.join(output_folder_path, exp_name)
+        title = f"{exp_name}_{data_input_type}_{analysis_type}{filtered_title}"
+        if filtered_data.empty:
+            fig, ax = plt.subplots(figsize=(20, 15))
+            ax.set_xticks([])  # Remove ticks
+            ax.set_yticks([])
+            ax.set_title(title.upper(), pad=20)
+            ax.set_xlabel("Experiments", labelpad=20)
+            ax.set_ylabel("Compounds")
             plt.tight_layout()
-            # Save or show the plot
-            # plt.savefig(heatmap_path)
-            plt.show()
-            print("x")
+            plt.savefig(heatmap_path)
+            # plt.show()
+            continue
+        fig, ax = plt.subplots(figsize=(15, 25))  # Adjust figure size for better layout
+        nan_mask = filtered_data.isna()
+        sns.heatmap(
+            filtered_data,
+            cmap="coolwarm",
+            linewidths=0.5,
+            linecolor="black",
+            square=True,  # Ensures equal aspect ratio
+            cbar_kws={"label": "Fold Change log2"},
+            mask=nan_mask,  # Mask NaN values to keep them white
+            ax=ax,
+            vmin=global_min,  # Set the minimum value for the color bar
+            vmax=global_max,  # Set the maximum value for the color bar
+        )
+        ax.xaxis.set_label_position("top")
+        ax.xaxis.tick_top()
+        ax.set_xlabel("Experiments", labelpad=20)
+        ax.spines['top'].set_visible(True)
+        ax.spines['right'].set_visible(True)
+        ax.spines['bottom'].set_visible(True)
+        ax.spines['left'].set_visible(True)
+        # Label the axes
+        plt.title(title.upper(), pad=20)
+        plt.xlabel("Experiments")
+        plt.ylabel("Compounds")
+        plt.xticks(rotation=90)
+        # plt.tight_layout()
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        # Save or show the plot
+        plt.savefig(heatmap_path, bbox_inches='tight')
+        # if exp_name == "gno_caecum":
+        #     print("gno_caecum")
+        # if "gno_caecum_ours" in title:
+        #     plt.show()
+        #     print(title)
+        print("x")
 
 if __name__ == '__main__':
-    input_folder_path = "/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics"
-    output_folder_path = "/home/direnc/results/mahana/metabolomics_heatmaps"
-    create_heatmaps(input_folder_path, output_folder_path)
+    # data_types = ["ours"]
+    data_input_types = ["ours", "cmrf" ]
+    analysis_types = ["single", "joined"]
+    for analysis_type in analysis_types:
+        for data_input_type in data_input_types:
+            input_folder_path = f"/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics_{data_input_type}"
+            output_folder_path = f"/home/direnc/results/mahana/TO_REPLACE/metabolomics_heatmaps_{data_input_type}_{analysis_type}"
+            create_heatmaps(input_folder_path, output_folder_path, analysis_type, True, data_input_type)
+            create_heatmaps(input_folder_path, output_folder_path, analysis_type, False, data_input_type)
+    # input_folder_path = "/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics_ours"
+    # output_folder_path = "/home/direnc/results/mahana/metabolomics_heatmaps_ours_filtered_joined"
+    # create_heatmaps(input_folder_path, output_folder_path)

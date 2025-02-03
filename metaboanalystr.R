@@ -8,8 +8,8 @@ library(MetaboAnalystR)
 # library(limma)
 
 # data <- read.csv("/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics/patient_abx_muc2_pre_post_serum.csv", sep = ",", header = TRUE, row.names = 1)
-input_dir <- "/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics/"
-output_dir <- "/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics/"
+input_dir <- "/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics_ours"
+output_dir <- "/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics_ours/"
 
 heatmap_data <- data.frame()
 
@@ -28,12 +28,12 @@ for (file_path in file_list) {
   mSet <- FilterVariable(mSet, "F", 20, "iqr")
   mSet <- PreparePrenormData(mSet)
   mSet <- Normalization(mSet, "SumNorm", "LogNorm", "AutoNorm", ratio = FALSE, ratioNum = 20)
-  mSet <- PlotNormSummary(mSet, paste0(output_dir, "norm_", file_name, "_"), "png", 72)
-  mSet <- PlotSampleNormSummary(mSet, paste0(output_dir, "snorm_", file_name, "_"), "png", 72)
+  # mSet <- PlotNormSummary(mSet, paste0(output_dir, "norm_", file_name, "_"), "png", 72)
+  # mSet <- PlotSampleNormSummary(mSet, paste0(output_dir, "snorm_", file_name, "_"), "png", 72)
   #### FOLD CHANGE DIRECTION IS A/B E.G. CTR_IBD3_CAECUM CITRULLINE = 0.03 A HAS LOWER LEVELS THAN B ####
   #### FOLD CHANGE DIRECTION IS A/B E.G. CTR_IBD3_CAECUM D-GLUCOSAMINE 6-PHOSPHATE = 21.2 A HAS HIGHER LEVELS THAN B ####
   mSet <- FC.Anal(mSet, 2, 0, FALSE)
-  mSet <- PlotFC(mSet, paste0(output_dir, "fc_", file_name, "_"), "png", 72)
+  # mSet <- PlotFC(mSet, paste0(output_dir, "fc_", file_name, "_"), "png", 72)
 
   # Perform T-tests
   mSet <- Ttests.Anal(mSet, nonpar = F, threshp = 0.05, paired = FALSE, equal.var = TRUE, "fdr", FALSE)
@@ -64,7 +64,7 @@ for (file_path in file_list) {
 }
 
 # Save the combined results
-write.csv(heatmap_data, file = paste0(output_dir, "combined_ttest_results.csv"))
+# write.csv(heatmap_data, file = paste0(output_dir, "combined_ttest_results.csv"))
 
 # mSet<-InitDataObjects("pktable", "stat", FALSE)
 # mSet<-Read.TextData(mSet, "/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics/patient_abx_muc2_pre_post_serum.csv", "colu", "disc")

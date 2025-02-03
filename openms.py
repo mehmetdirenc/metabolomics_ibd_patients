@@ -126,8 +126,13 @@ def adapt_intensities(old_intensities_folder, new_intensities_folder, openms_res
         basename_oif = os.path.basename(oif)
         res_csv_path = os.path.join(new_intensities_folder, basename_oif)
         print(basename_oif)
-        if os.path.exists(res_csv_path):
-            continue
+        # if os.path.exists(res_csv_path):
+        #     df = pd.read_csv(res_csv_path, header=None)
+        #     df = df.drop_duplicates(subset=[0], keep='first')
+        #     df = df.loc[~df.iloc[:, 1:].duplicated(keep='first')]
+        #     df.to_csv(res_csv_path, index=False, header=False)
+        #
+        #     continue
         # Initialize a dictionary to store data
         data_dict = {}
 
@@ -184,13 +189,8 @@ def adapt_intensities(old_intensities_folder, new_intensities_folder, openms_res
         for sample in file_cols:
             if sample == "Sample":
                 continue
-            # Map abundances to the final dataframe, filling missing values with 0
-            final_df[sample] = final_df.index.map(data_dict.get(sample, {}))
-            final_df.dropna(subset=[sample], inplace=True)
+            final_df[sample] = final_df.index.map(data_dict.get(sample, {})).fillna(0)
 
-        # Add the labels row
-        # final_df.loc['Label'] = labels
-        # final_df.loc['Sample'] = file_cols
         final_df.reset_index(inplace=True)
         final_df.rename(columns={'index': 'Compound'}, inplace=True)
         # Create a new DataFrame for the 'Label' and 'Sample' rows
@@ -198,13 +198,12 @@ def adapt_intensities(old_intensities_folder, new_intensities_folder, openms_res
         labels_row = pd.DataFrame([labels], columns=final_df.columns)
 
         # Append 'Label' and 'Sample' rows to the beginning of the final dataframe
-        final_df = pd.concat([labels_row, sample_row, final_df])
+        final_df = pd.concat([sample_row, labels_row, final_df])
 
-        # Remove quotes from the first column (if any)
-        # Reset index to move 'Compound' to the first column
-        final_df['Compound'] = final_df['Compound'].str.replace(',', '_', regex=False)
-        final_df['Compound'] = final_df['Compound'].str.replace('"', '', regex=False)
-        # Save to CSV
+        final_df.iloc[:, 0] = final_df.iloc[:, 0].str.replace(r"[^a-zA-Z0-9\-]+", "", regex=True)
+        final_df = final_df.drop_duplicates(subset=final_df.columns[0], keep='first')
+        final_df = final_df.loc[~final_df.iloc[:, 1:].duplicated(keep='first')]
+
         final_df.to_csv(res_csv_path, index=False, header=False)
     return
 
@@ -234,5 +233,3 @@ if __name__ == '__main__':
     old_intensities_folder = "/mnt/lustre/home/mager/magmu818/inputs/mahana/ms/ms_ms_analysis_files/metabolomics_statistics_cmrf/"
     new_intensities_folder = "/mnt/lustre/home/mager/magmu818/inputs/mahana/ms/ms_ms_analysis_files/metabolomics_statistics_ours/"
     adapt_intensities(old_intensities_folder, new_intensities_folder, openms_results_folder, rt_compound_filepath_2024, rt_compound_filepath_2021)
-    # analyze_mass_finder(mztab_file, old_intensities_folder, new_intensities_folder, openms_results_folder)
-    pass
