@@ -1,4 +1,7 @@
 library(MetaboAnalystR)
+library(pheatmap)
+library(stringr)
+library(ggplot2)
 # library(MSnbase)
 # library(xcms)
 # library(dplyr)
@@ -10,6 +13,7 @@ library(MetaboAnalystR)
 # data <- read.csv("/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics/patient_abx_muc2_pre_post_serum.csv", sep = ",", header = TRUE, row.names = 1)
 input_dir <- "/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics_ours"
 output_dir <- "/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics_ours/"
+n_out_dir <- "/home/direnc/results/mahana/ms/heatmaps/filtered/normalizations/"
 
 heatmap_data <- data.frame()
 
@@ -28,6 +32,65 @@ for (file_path in file_list) {
   mSet <- FilterVariable(mSet, "F", 20, "iqr")
   mSet <- PreparePrenormData(mSet)
   mSet <- Normalization(mSet, "SumNorm", "LogNorm", "AutoNorm", ratio = FALSE, ratioNum = 20)
+  samples <- mSet$dataSet$url.smp.nms
+  labels <- mSet$dataSet$cls
+  normalized_values <- t(mSet$dataSet$norm)
+  colnames(normalized_values) <- labels
+  # Extract unique sample groups dynamically
+  # sample_groups <- unique(str_replace(colnames(normalized_values), "_[^_]+$", ""))
+  sample_groups <- c(colnames(normalized_values)[1], tail(colnames(normalized_values), 1))
+  # Assign columns to their respective groups
+  group1_cols <- grep(sample_groups[1], colnames(normalized_values), value = TRUE)
+  group2_cols <- grep(sample_groups[2], colnames(normalized_values), value = TRUE)
+  # group1_cols <- grep(paste0("^", sample_groups[1], "(\\.|$)"), colnames(normalized_values), value = TRUE)
+  # group2_cols <- grep(paste0("^", sample_groups[2], "(\\.|$)"), colnames(normalized_values), value = TRUE)
+
+  # Compute row sums separately for each group
+  row_sums_group1 <- rowSums(normalized_values[, grep(paste0("^", group1_cols), colnames(normalized_values)), drop = FALSE], na.rm = TRUE)
+  row_sums_group2 <- rowSums(normalized_values[, grep(paste0("^", group2_cols), colnames(normalized_values)), drop = FALSE], na.rm = TRUE)
+
+  # Select top 20 highest and bottom 20 lowest rows for each group
+  selected_rows <- unique(c(
+    names(sort(row_sums_group1, decreasing = TRUE)[1:10]),
+    names(sort(row_sums_group1, decreasing = FALSE)[1:10]),
+    names(sort(row_sums_group2, decreasing = TRUE)[1:10]),
+    names(sort(row_sums_group2, decreasing = FALSE)[1:10])
+  ))
+
+  # Filter data matrix to only keep selected rows
+  normalized_values <- normalized_values[selected_rows, ]
+  # Subset columns
+  data_group1 <- normalized_values[, grep(paste0("^", group1_cols), colnames(normalized_values)), drop = FALSE]
+  data_group2 <- normalized_values[, grep(paste0("^", group2_cols), colnames(normalized_values)), drop = FALSE]
+
+  # Insert a column of NA values to create a gap
+  gap_col <- matrix(NA, nrow = nrow(normalized_values), ncol = 1)
+  colnames(gap_col) <- "Gap"
+
+  # Merge the groups with a gap in between
+  data_with_gap <- cbind(data_group1, data_group2)
+  midpoint_group1 <- round(length(group1_cols) / 2)
+  midpoint_group2 <- length(group1_cols) + 1 + round(length(group2_cols) / 2)  # +1 accounts for the gap
+  labels_col <- c(sample_groups[1], rep("", max(0, length(group1_cols) - 1)),
+                  "",  # Placeholder for gap
+                  sample_groups[2], rep("", max(0, length(group2_cols) - 1)))
+  # Generate heatmap
+  # Generate heatmap with square cells and single label per group
+  ph <- pheatmap(data_with_gap,
+           cluster_rows = FALSE,
+           color = colorRampPalette(c("blue", "white", "red"))(500),
+           cluster_cols = FALSE,
+           gaps_col = ncol(data_group1),  # Insert gap dynamically
+           cellwidth = 10, cellheight = 10,  # Show only one label per group
+         # labels_col = c(rep("", max(0, midpoint_group1 - 1)), sample_groups[1], rep("", length(group1_cols) - midpoint_group1),
+         #                "",  # Empty label for the gap
+         #                rep("", max(0, midpoint_group2 - length(group1_cols) - 2)), sample_groups[2], rep("", length(group2_cols) - (midpoint_group2 - length(group1_cols) - 1))),
+  silent = TRUE)
+  n_path = paste0(n_out_dir, file_name, ".png")
+  ggsave(n_path, plot = ph$gtable, width = 20, height = 10, dpi = 500)
+  next
+# q("no")
+  # print(head(normalized_values))
   # mSet <- PlotNormSummary(mSet, paste0(output_dir, "norm_", file_name, "_"), "png", 72)
   # mSet <- PlotSampleNormSummary(mSet, paste0(output_dir, "snorm_", file_name, "_"), "png", 72)
   #### FOLD CHANGE DIRECTION IS A/B E.G. CTR_IBD3_CAECUM CITRULLINE = 0.03 A HAS LOWER LEVELS THAN B ####

@@ -135,15 +135,30 @@ def create_heatmaps(folder_path, output_folder_path, analysis_type, filtered, da
                 filtered_data = filtered_data.dropna(how="all")
                 if exp_name == "gno_caecum":
                     print("asd")
-            if filtered:
-                filtered_data = filtered_data.head(40)
+
             all_dataframes[exp_name] = filtered_data
     # global_min = -10.1
     # global_max = 7
+    cases = [["patient_abx_", "patient1FMT_"],
+             ["patient2FMT_", "muc2_minus_--hm"],
+             ["gno_--ibd1", "muc2_minus_--hm"]
+
+
+             ]
+    case_frames = {}
+    for data_type in data_types:
+        for case in cases:
+            df1 = all_dataframes[case[0].split("--")[0] + data_type]
+            df2 = all_dataframes[case[1].split("--")[0] + data_type]
+            joined_df = df1.join(df2, how='inner')
+
+    print(all_dataframes.keys())
     global_min = min(all_dataframes[df].min().min() for df in all_dataframes)
     global_max = max(all_dataframes[df].max().max() for df in all_dataframes)
     for exp_name in all_dataframes:
         filtered_data = all_dataframes[exp_name]
+        if filtered:
+            filtered_data = filtered_data.head(40)
         heatmap_path = os.path.join(output_folder_path, exp_name)
         title = f"{exp_name}_{data_input_type}_{analysis_type}{filtered_title}"
         if filtered_data.empty:
