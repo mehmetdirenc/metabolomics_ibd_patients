@@ -39,7 +39,7 @@ def filter_data(data, exp_type, data_type):
 
 def sort_compounds(data):
     presence_counts = data.notna().sum(axis=1)  # Count non-NaN occurrences across experiments
-    mean_fold_change = data.mean(axis=1, skipna=True)  # Calculate mean fold change, ignoring NaNs
+    mean_fold_change = data.abs().mean(axis=1, skipna=True)  # Calculate mean fold change, ignoring NaNs ABSOLUTE VALUES
 
     # Create a DataFrame for sorting keys
     sorting_key = pd.DataFrame({
@@ -54,6 +54,20 @@ def sort_compounds(data):
     sorted_data = data.loc[sorting_key.index]
 
     return sorted_data
+
+def get_red_blue_extremes_from_sorted(data, top_n=15):
+    # Sum of only positive values (reds)
+    red_strength = data.clip(lower=0).sum(axis=1, skipna=True)
+    # Sum of only negative values (blues)
+    blue_strength = data.clip(upper=0).sum(axis=1, skipna=True)  # This will be negative
+
+    # Get top rows by red sum (descending)
+    top_red = red_strength.sort_values(ascending=False).head(top_n).index
+    # Get top rows by blue sum (ascending, since values are negative)
+    top_blue = blue_strength.sort_values().head(top_n).index
+
+    combined_index = list(top_red) + list(top_blue)
+    return data.loc[combined_index]
 
 def compare_compounds(df1, df2):
     common_compounds_dict = {}
@@ -133,32 +147,44 @@ def create_heatmaps(folder_path, output_folder_path, analysis_type, filtered, da
                 filtered_data = filtered_data.reindex(sorted(filtered_data.columns), axis=1)
                 filtered_data = filtered_data.loc[~(filtered_data == 0).all(axis=1)]
                 filtered_data = filtered_data.dropna(how="all")
-                if exp_name == "gno_caecum":
-                    print("asd")
 
             all_dataframes[exp_name] = filtered_data
     # global_min = -10.1
     # global_max = 7
     cases = [["patient_abx_", "patient1FMT_"],
              ["patient2FMT_", "muc2_minus_--hm"],
-             ["gno_--ibd1", "muc2_minus_--hm"]
-
-
+             ["gno_--ibd1", "muc2_minus_--hm"],
+             ["patient_abx_", "muc2_minus_--hm"],
+             ["patient1FMT_", "muc2_minus_--hm"]
              ]
     case_frames = {}
     for data_type in data_types:
         for case in cases:
-            df1 = all_dataframes[case[0].split("--")[0] + data_type]
-            df2 = all_dataframes[case[1].split("--")[0] + data_type]
-            joined_df = df1.join(df2, how='inner')
+            if analysis_type == "joined":
+                data_type = ""
+                # case = case[0:-1]
+                df_name_1 = case[0].split("--")[0][0:-1] + data_type
+                df_name_2 = case[1].split("--")[0][0:-1] + data_type
+            else:
+                df_name_1 = case[0].split("--")[0] + data_type
+                df_name_2 = case[1].split("--")[0] + data_type
 
-    print(all_dataframes.keys())
+            df1 = all_dataframes[df_name_1]
+            df2 = all_dataframes[df_name_2]
+            joined_df = df1.join(df2, how='inner')
+            df_name = df_name_1 + "_" + df_name_2
+            all_dataframes[df_name] = joined_df
+    # print(all_dataframes.keys())
     global_min = min(all_dataframes[df].min().min() for df in all_dataframes)
     global_max = max(all_dataframes[df].max().max() for df in all_dataframes)
     for exp_name in all_dataframes:
+        # if data_input_type == "cmrf" or exp_name.startswith("gno_caecum_m") == False:
+        #     continue
         filtered_data = all_dataframes[exp_name]
+        # if filtered:
+        #     filtered_data = filtered_data.head(40)
         if filtered:
-            filtered_data = filtered_data.head(40)
+            filtered_data = get_red_blue_extremes_from_sorted(filtered_data, top_n=15)
         heatmap_path = os.path.join(output_folder_path, exp_name)
         title = f"{exp_name}_{data_input_type}_{analysis_type}{filtered_title}"
         if filtered_data.empty:
@@ -169,7 +195,8 @@ def create_heatmaps(folder_path, output_folder_path, analysis_type, filtered, da
             ax.set_xlabel("Experiments", labelpad=20)
             ax.set_ylabel("Compounds")
             plt.tight_layout()
-            plt.savefig(heatmap_path)
+            plt.savefig(heatmap_path, format='pdf', dpi=600)
+            plt.close(fig)
             # plt.show()
             continue
         fig, ax = plt.subplots(figsize=(15, 25))  # Adjust figure size for better layout
@@ -201,13 +228,17 @@ def create_heatmaps(folder_path, output_folder_path, analysis_type, filtered, da
         # plt.tight_layout()
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         # Save or show the plot
-        plt.savefig(heatmap_path, bbox_inches='tight')
+        plt.savefig(heatmap_path, bbox_inches='tight', format='pdf', dpi=600)
+        plt.cla()
+        plt.close(fig)
+        tsv_output_path = heatmap_path + ".tsv"
+        filtered_data.to_csv(tsv_output_path, sep="\t", index=True)
         # if exp_name == "gno_caecum":
         #     print("gno_caecum")
         # if "gno_caecum_ours" in title:
         #     plt.show()
         #     print(title)
-        print("x")
+        # print("x")
 
 if __name__ == '__main__':
     # data_types = ["ours"]
@@ -216,7 +247,7 @@ if __name__ == '__main__':
     for analysis_type in analysis_types:
         for data_input_type in data_input_types:
             input_folder_path = f"/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics_{data_input_type}"
-            output_folder_path = f"/home/direnc/results/mahana/TO_REPLACE/metabolomics_heatmaps_{data_input_type}_{analysis_type}"
+            output_folder_path = f"/home/direnc/results/mahana/new_metabolomics/TO_REPLACE/metabolomics_heatmaps_{data_input_type}_{analysis_type}"
             create_heatmaps(input_folder_path, output_folder_path, analysis_type, True, data_input_type)
             create_heatmaps(input_folder_path, output_folder_path, analysis_type, False, data_input_type)
     # input_folder_path = "/home/direnc/inputs/mahana/ms_ms/metabolomics_statistics_ours"
